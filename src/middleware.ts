@@ -6,7 +6,7 @@ const isProtectedRoute = createRouteMatcher([
   "/visits(.*)",
 ]);
 
-const isAdminRoute = createRouteMatcher(["/admin(.*)"]);
+const isAdminRoute = createRouteMatcher(["/admin", "/admin/(.*)"]);
 
 export default clerkMiddleware(async (auth, req) => {
   const { userId, sessionClaims } = await auth();

@@ -1,3 +1,8 @@
+/**
+ * Drizzle ORM connection — used ONLY for migrations (drizzle-kit).
+ * All runtime database queries should use the Supabase SDK instead,
+ * so that Row Level Security (RLS) policies are enforced.
+ */
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import * as schema from "./schema";
