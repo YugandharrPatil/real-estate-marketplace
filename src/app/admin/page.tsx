@@ -4,6 +4,7 @@ import { supabase } from "@/lib/supabase/server";
 import { TABLE_NAMES } from "@/lib/data/table-names";
 import { Building2, CalendarCheck, MessageSquare, FileQuestion } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import Link from "next/link";
 
 export default async function AdminDashboard() {
   const [
@@ -34,17 +35,30 @@ export default async function AdminDashboard() {
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {stats.map(({ label, value, icon: Icon }) => (
-          <Card key={label}>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">
-                {label}
-              </CardTitle>
-              <Icon className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <p className="text-2xl font-bold">{value}</p>
-            </CardContent>
-          </Card>
+          <Link
+            key={label}
+            href={
+              label === "Visit Requests"
+                ? "/admin/requests"
+                : label === "Inquiries"
+                ? "/admin/inquiries"
+                : label === "Chats"
+                ? "/admin/chats"
+                : "/admin/properties"
+            }
+          >
+            <Card className="hover:border-primary transition-colors cursor-pointer">
+              <CardHeader className="flex flex-row items-center justify-between pb-2">
+                <CardTitle className="text-sm font-medium text-muted-foreground">
+                  {label}
+                </CardTitle>
+                <Icon className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <p className="text-2xl font-bold">{value}</p>
+              </CardContent>
+            </Card>
+          </Link>
         ))}
       </div>
     </div>

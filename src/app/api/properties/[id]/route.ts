@@ -38,14 +38,51 @@ export async function PUT(
   try {
     const { id } = await params;
     const body = await req.json();
+
+    // Map camelCase to snake_case for DB
+    // We only include fields that should be updated
+    const updateData: any = {
+      title: body.title,
+      description: body.description,
+      price: body.price,
+      address: body.address,
+      city: body.city,
+      state: body.state,
+      zip: body.zip,
+      bedrooms: body.bedrooms,
+      bathrooms: body.bathrooms,
+      area_sqft: body.areaSqft,
+      property_type: body.propertyType,
+      status: body.status,
+      latitude: body.latitude,
+      longitude: body.longitude,
+      images: body.images,
+      updated_at: new Date().toISOString(),
+    };
+
+    // Remove undefined fields to avoid overwriting with nulls if not provided
+    Object.keys(updateData).forEach(key => {
+      if (updateData[key] === undefined) {
+        delete updateData[key];
+      }
+    });
+
     const { data, error } = await supabase
       .from(TABLE_NAMES.properties)
-      .update({ ...body, updated_at: new Date().toISOString() })
+      .update(updateData)
       .eq("id", id)
       .select()
       .single();
 
-    if (error || !data) {
+    if (error) {
+      console.error(`Supabase error (PUT /api/properties/${id}):`, error);
+      return NextResponse.json(
+        { error: error.message || "Property not found" },
+        { status: error.code === "PGRST116" ? 404 : 400 }
+      );
+    }
+
+    if (!data) {
       return NextResponse.json(
         { error: "Property not found" },
         { status: 404 }

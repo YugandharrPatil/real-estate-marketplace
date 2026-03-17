@@ -39,7 +39,8 @@ export function Navbar() {
   const [mobileOpen, setMobileOpen] = useState(false);
 
   const role = user?.publicMetadata?.role as string;
-  const isAdmin = role === "admin";
+  const userEmail = user?.primaryEmailAddress?.emailAddress;
+  const isAdmin = role === "admin" || userEmail === "admin@rental.com";
   const navLinks = isAdmin ? adminLinks : clientLinks;
 
   return (

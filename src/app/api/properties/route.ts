@@ -44,13 +44,37 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
+    
+    // Map camelCase to snake_case for DB
+    const insertData = {
+      title: body.title,
+      description: body.description,
+      price: body.price,
+      address: body.address,
+      city: body.city,
+      state: body.state,
+      zip: body.zip,
+      bedrooms: body.bedrooms,
+      bathrooms: body.bathrooms,
+      area_sqft: body.areaSqft,
+      property_type: body.propertyType,
+      status: body.status,
+      latitude: body.latitude,
+      longitude: body.longitude,
+      images: body.images,
+    };
+
     const { data, error } = await supabase
       .from(TABLE_NAMES.properties)
-      .insert(body)
+      .insert(insertData)
       .select()
       .single();
 
-    if (error) throw error;
+    if (error) {
+      console.error("Supabase error (POST /api/properties):", error);
+      throw error;
+    }
+    
     return NextResponse.json(data, { status: 201 });
   } catch (error) {
     console.error("Error creating property:", error);

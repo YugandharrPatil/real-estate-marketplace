@@ -1,6 +1,7 @@
-export const dynamic = "force-dynamic";
+"use client";
 
-import { supabase } from "@/lib/supabase/server";
+import { useState, useEffect } from "react";
+import { supabase } from "@/lib/supabase/client";
 import { TABLE_NAMES } from "@/lib/data/table-names";
 import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
@@ -13,14 +14,68 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { format } from "date-fns";
+import { toast } from "sonner";
+import { Loader2 } from "lucide-react";
 
-export default async function AdminChatsPage() {
-  const { data: allChats } = await supabase
-    .from(TABLE_NAMES.chats)
-    .select("*")
-    .order("updated_at", { ascending: false });
+interface Chat {
+  id: string;
+  user_name: string;
+  user_email: string;
+  is_active: boolean;
+  updated_at: string;
+}
 
-  const items = allChats ?? [];
+export default function AdminChatsPage() {
+  const [chats, setChats] = useState<Chat[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const fetchChats = async () => {
+    try {
+      const { data, error } = await supabase
+        .from(TABLE_NAMES.chats)
+        .select("*")
+        .order("updated_at", { ascending: false });
+
+      if (error) throw error;
+      setChats(data || []);
+    } catch {
+      toast.error("Failed to load chats");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchChats();
+
+    // Listen for new chats or status updates
+    const channel = supabase
+      .channel("admin-chat-list")
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: TABLE_NAMES.chats,
+        },
+        () => {
+          fetchChats(); // Re-fetch list on any change to chats table
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -41,7 +96,7 @@ export default async function AdminChatsPage() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {items.length === 0 ? (
+            {chats.length === 0 ? (
               <TableRow>
                 <TableCell
                   colSpan={5}
@@ -51,7 +106,7 @@ export default async function AdminChatsPage() {
                 </TableCell>
               </TableRow>
             ) : (
-              items.map((c) => (
+              chats.map((c) => (
                 <TableRow key={c.id}>
                   <TableCell className="font-medium">{c.user_name}</TableCell>
                   <TableCell>{c.user_email}</TableCell>

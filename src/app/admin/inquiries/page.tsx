@@ -13,8 +13,19 @@ import {
 import { format } from "date-fns";
 import { DeleteInquiryButton } from "./delete-inquiry-button";
 
+interface Inquiry {
+  id: string;
+  property_id: string;
+  name: string;
+  email: string;
+  phone: string;
+  message: string;
+  created_at: string;
+  [key: string]: any; // for the joined property
+}
+
 export default async function AdminInquiriesPage() {
-  const { data: allInquiries } = await supabase
+  const { data: allInquiries, error } = await supabase
     .from(TABLE_NAMES.inquiries)
     .select(`
       *,
@@ -24,7 +35,11 @@ export default async function AdminInquiriesPage() {
     `)
     .order("created_at", { ascending: false });
 
-  const items = allInquiries ?? [];
+  if (error) {
+    console.error("Supabase error fetching inquiries:", error);
+  }
+
+  const items = (allInquiries as Inquiry[]) ?? [];
 
   return (
     <div className="space-y-6">
@@ -49,7 +64,17 @@ export default async function AdminInquiriesPage() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {items.length === 0 ? (
+            {error ? (
+              <TableRow>
+                <TableCell
+                  colSpan={7}
+                  className="text-center text-destructive py-8"
+                >
+                  Error loading inquiries: {error.message}.
+                  Please check RLS policies or database connectivity.
+                </TableCell>
+              </TableRow>
+            ) : items.length === 0 ? (
               <TableRow>
                 <TableCell
                   colSpan={7}
@@ -59,8 +84,8 @@ export default async function AdminInquiriesPage() {
                 </TableCell>
               </TableRow>
             ) : (
-              items.map((inq: any) => {
-                const property = inq[TABLE_NAMES.properties] as { title: string } | null;
+              items.map((inq: Inquiry) => {
+                const property = inq["re_properties"] as { title: string } | null;
                 return (
                   <TableRow key={inq.id}>
                     <TableCell className="font-medium max-w-[150px] truncate outline-none">

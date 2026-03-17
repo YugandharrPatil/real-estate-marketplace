@@ -9,6 +9,9 @@ import { toast } from "sonner";
 import { Send, Loader2 } from "lucide-react";
 import { format } from "date-fns";
 import { useParams } from "next/navigation";
+import { supabase } from "@/lib/supabase/client";
+import { TABLE_NAMES } from "@/lib/data/table-names";
+import { useCallback } from "react";
 
 interface Message {
   id: string;
@@ -37,24 +40,43 @@ export default function AdminChatDetailPage() {
   const [sending, setSending] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
 
-  const fetchChat = async () => {
+  const fetchChat = useCallback(async () => {
     try {
       const res = await fetch(`/api/chats/${chatId}`);
       const data = await res.json();
       setChat(data.chat);
-      setMessages(data.messages);
+      setMessages(data.messages || []);
     } catch {
       toast.error("Failed to load chat");
     } finally {
       setLoading(false);
     }
-  };
+  }, [chatId]);
 
   useEffect(() => {
     fetchChat();
-    const interval = setInterval(fetchChat, 5000); // Poll every 5s
-    return () => clearInterval(interval);
-  }, [chatId]);
+
+    // Realtime subscription
+    const channel = supabase
+      .channel(`admin-chat:${chatId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: TABLE_NAMES.messages,
+          filter: `chat_id=eq.${chatId}`,
+        },
+        (payload) => {
+          setMessages((prev) => [...prev, payload.new as Message]);
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [chatId, fetchChat]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });

@@ -1,7 +1,6 @@
 import { Navbar } from "@/components/navbar";
-import { ChatWidget } from "@/components/chat-widget";
 
-export default function ClientLayout({
+export default function AdminLayout({
   children,
 }: {
   children: React.ReactNode;
@@ -9,8 +8,11 @@ export default function ClientLayout({
   return (
     <div className="min-h-screen flex flex-col">
       <Navbar />
-      <main className="flex-1">{children}</main>
-      <ChatWidget />
+      <main className="flex-1 p-6 md:p-10 bg-muted/30">
+        <div className="max-w-6xl mx-auto">
+          {children}
+        </div>
+      </main>
     </div>
   );
 }

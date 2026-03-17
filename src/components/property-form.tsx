@@ -41,11 +41,13 @@ const propertySchema = z.object({
 type PropertyFormData = z.infer<typeof propertySchema>;
 
 interface PropertyFormProps {
-  initialData?: PropertyFormData & { id?: string; images?: string[] };
+  initialData?: Partial<PropertyFormData> & { id?: string; images?: string[] };
   mode: "create" | "edit";
+  onSuccess?: () => void;
+  onCancel?: () => void;
 }
 
-export function PropertyForm({ initialData, mode }: PropertyFormProps) {
+export function PropertyForm({ initialData, mode, onSuccess, onCancel }: PropertyFormProps) {
   const router = useRouter();
   const [images, setImages] = useState<string[]>(initialData?.images || []);
   const [uploading, setUploading] = useState(false);
@@ -131,8 +133,12 @@ export function PropertyForm({ initialData, mode }: PropertyFormProps) {
       toast.success(
         mode === "edit" ? "Property updated!" : "Property created!"
       );
-      router.push("/admin/properties");
-      router.refresh();
+      if (onSuccess) {
+        onSuccess();
+      } else {
+        router.push("/admin/properties");
+        router.refresh();
+      }
     } catch {
       toast.error("Something went wrong");
     } finally {
@@ -337,7 +343,7 @@ export function PropertyForm({ initialData, mode }: PropertyFormProps) {
         <Button
           type="button"
           variant="outline"
-          onClick={() => router.push("/admin/properties")}
+          onClick={() => (onCancel ? onCancel() : router.push("/admin/properties"))}
         >
           Cancel
         </Button>
