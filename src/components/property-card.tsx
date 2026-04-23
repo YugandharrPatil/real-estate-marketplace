@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { useState } from "react";
 import { toast } from "sonner";
 import { useAuth } from "@clerk/nextjs";
+import { toggleSaveAction } from "@/lib/actions/user";
 
 interface PropertyCardProps {
   property: {
@@ -48,24 +49,15 @@ export function PropertyCard({
     }
 
     setSaving(true);
-    try {
-      if (saved) {
-        await fetch(`/api/saved?propertyId=${property.id}`, { method: "DELETE" });
-      } else {
-        await fetch("/api/saved", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ propertyId: property.id }),
-        });
-      }
-      setSaved(!saved);
-      onToggleSave?.(property.id, !saved);
-      toast.success(saved ? "Removed from saved" : "Property saved!");
-    } catch {
-      toast.error("Something went wrong");
-    } finally {
-      setSaving(false);
+    const result = await toggleSaveAction(property.id);
+    if (result.error) {
+      toast.error(result.error);
+    } else {
+      setSaved(result.saved ?? false);
+      onToggleSave?.(property.id, result.saved ?? false);
+      toast.success(result.saved ? "Property saved!" : "Removed from saved");
     }
+    setSaving(false);
   };
 
   return (

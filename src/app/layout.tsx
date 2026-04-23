@@ -1,40 +1,40 @@
-import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
-import { ClerkProvider } from "@clerk/nextjs";
+import { Navbar } from "@/components/navbar";
+import { QueryProvider } from "@/components/query-provider";
+import { ThemeProvider } from "@/components/theme-provider";
 import { Toaster } from "@/components/ui/sonner";
+import { ClerkProvider } from "@clerk/nextjs";
+import type { Metadata } from "next";
+import { Inter } from "next/font/google";
 import "./globals.css";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
+const inter = Inter({
+	variable: "--font-sans",
+	subsets: ["latin"],
 });
 
 export const metadata: Metadata = {
-  title: "EstateHub — Real Estate Marketplace",
-  description:
-    "Browse properties, book visits, and connect with brokers all in one place.",
+	title: "EstateHub — Real Estate Marketplace",
+	description: "Browse properties, book visits, and connect with brokers all in one place.",
 };
 
 export default function RootLayout({
-  children,
+	children,
 }: Readonly<{
-  children: React.ReactNode;
+	children: React.ReactNode;
 }>) {
-  return (
-    <ClerkProvider>
-      <html lang="en">
-        <body
-          className={`${geistSans.variable} ${geistMono.variable} antialiased`}
-        >
-          {children}
-          <Toaster richColors position="top-right" />
-        </body>
-      </html>
-    </ClerkProvider>
-  );
+	return (
+		<ClerkProvider>
+			<html lang="en" suppressHydrationWarning>
+				<body className={`${inter.variable} font-sans antialiased`}>
+					<ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
+						<QueryProvider>
+							<Navbar />
+							{children}
+							<Toaster richColors />
+						</QueryProvider>
+					</ThemeProvider>
+				</body>
+			</html>
+		</ClerkProvider>
+	);
 }

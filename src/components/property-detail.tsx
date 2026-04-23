@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import Image from "next/image";
-import { useRouter } from "next/navigation";
 import { useUser } from "@clerk/nextjs";
 import {
   Heart,
@@ -15,15 +14,39 @@ import {
   ChevronLeft,
   ChevronRight,
   Share2,
+  ChevronDownIcon,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { Calendar as CalendarComponent } from "@/components/ui/calendar";
+import {
+  Field,
+  FieldGroup,
+  FieldLabel,
+  FieldError,
+} from "@/components/ui/field";
+import { format } from "date-fns";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { InquiryForm } from "@/components/inquiry-form";
+import { bookVisitAction, toggleSaveAction } from "@/lib/actions/user";
+import { useForm, Controller } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
+
+const visitFormSchema = z.object({
+  visitDate: z.date({ error: "Please select a date" }),
+  visitTime: z.string().min(1, "Please select a time"),
+});
+
+type VisitFormValues = z.infer<typeof visitFormSchema>;
 
 interface PropertyDetailProps {
   property: {
@@ -53,14 +76,24 @@ export function PropertyDetail({
   isSaved: initialSaved,
   isLoggedIn,
 }: PropertyDetailProps) {
-  const router = useRouter();
   const { user } = useUser();
   const [saved, setSaved] = useState(initialSaved);
   const [currentImage, setCurrentImage] = useState(0);
   const [showVisitForm, setShowVisitForm] = useState(false);
-  const [visitDate, setVisitDate] = useState("");
-  const [visitTime, setVisitTime] = useState("");
-  const [booking, setBooking] = useState(false);
+  const [datePickerOpen, setDatePickerOpen] = useState(false);
+
+  const {
+    control,
+    handleSubmit,
+    reset,
+    formState: { errors, isSubmitting },
+  } = useForm<VisitFormValues>({
+    resolver: zodResolver(visitFormSchema),
+    defaultValues: {
+      visitDate: undefined,
+      visitTime: "10:00",
+    },
+  });
 
   const images = property.images || [];
 
@@ -69,56 +102,35 @@ export function PropertyDetail({
       toast.error("Please sign in to save properties");
       return;
     }
-    try {
-      if (saved) {
-        await fetch(`/api/saved?propertyId=${property.id}`, {
-          method: "DELETE",
-        });
-      } else {
-        await fetch("/api/saved", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ propertyId: property.id }),
-        });
-      }
-      setSaved(!saved);
-      toast.success(saved ? "Removed from saved" : "Property saved!");
-    } catch {
-      toast.error("Something went wrong");
+    const result = await toggleSaveAction(property.id);
+    if (result.error) {
+      toast.error(result.error);
+    } else {
+      setSaved(result.saved ?? false);
+      toast.success(result.saved ? "Property saved!" : "Removed from saved");
     }
   };
 
-  const bookVisit = async () => {
+  const onSubmit = async (data: VisitFormValues) => {
     if (!isLoggedIn) {
       toast.error("Please sign in to book a visit");
       return;
     }
-    if (!visitDate || !visitTime) {
-      toast.error("Please select a date and time");
-      return;
-    }
-    setBooking(true);
-    try {
-      const res = await fetch("/api/visits", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          propertyId: property.id,
-          visitDate,
-          visitTime,
-          userName: user?.fullName || "User",
-          userEmail: user?.emailAddresses?.[0]?.emailAddress || "",
-        }),
-      });
-      if (!res.ok) throw new Error();
+
+    const result = await bookVisitAction({
+      propertyId: property.id,
+      visitDate: format(data.visitDate, "yyyy-MM-dd"),
+      visitTime: data.visitTime,
+      userName: user?.fullName || "User",
+      userEmail: user?.emailAddresses?.[0]?.emailAddress || "",
+    });
+
+    if (result.error) {
+      toast.error(result.error);
+    } else {
       toast.success("Visit booked! We'll confirm your appointment soon.");
+      reset();
       setShowVisitForm(false);
-      setVisitDate("");
-      setVisitTime("");
-    } catch {
-      toast.error("Failed to book visit");
-    } finally {
-      setBooking(false);
     }
   };
 
@@ -267,40 +279,96 @@ export function PropertyDetail({
             </CardHeader>
             <CardContent>
               {showVisitForm ? (
-                <div className="space-y-3">
-                  <div className="space-y-1.5">
-                    <Label>Date</Label>
-                    <Input
-                      type="date"
-                      value={visitDate}
-                      onChange={(e) => setVisitDate(e.target.value)}
-                      min={new Date().toISOString().split("T")[0]}
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label>Time</Label>
-                    <Input
-                      type="time"
-                      value={visitTime}
-                      onChange={(e) => setVisitTime(e.target.value)}
-                    />
-                  </div>
+                <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+                  <FieldGroup className="flex-row">
+                    <Field data-invalid={!!errors.visitDate}>
+                      <FieldLabel htmlFor="visit-date">Date</FieldLabel>
+                      <Controller
+                        name="visitDate"
+                        control={control}
+                        render={({ field }) => (
+                          <Popover
+                            open={datePickerOpen}
+                            onOpenChange={setDatePickerOpen}
+                          >
+                            <PopoverTrigger asChild>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                id="visit-date"
+                                className="w-full justify-between font-normal"
+                              >
+                                {field.value
+                                  ? format(field.value, "PPP")
+                                  : "Select date"}
+                                <ChevronDownIcon />
+                              </Button>
+                            </PopoverTrigger>
+                            <PopoverContent
+                              className="w-auto overflow-hidden p-0"
+                              align="start"
+                            >
+                              <CalendarComponent
+                                mode="single"
+                                selected={field.value}
+                                captionLayout="dropdown"
+                                defaultMonth={field.value}
+                                onSelect={(date) => {
+                                  field.onChange(date);
+                                  setDatePickerOpen(false);
+                                }}
+                                disabled={(date) =>
+                                  date <
+                                  new Date(new Date().setHours(0, 0, 0, 0))
+                                }
+                              />
+                            </PopoverContent>
+                          </Popover>
+                        )}
+                      />
+                      {errors.visitDate && (
+                        <FieldError>{errors.visitDate.message}</FieldError>
+                      )}
+                    </Field>
+                    <Field data-invalid={!!errors.visitTime}>
+                      <FieldLabel htmlFor="visit-time">Time</FieldLabel>
+                      <Controller
+                        name="visitTime"
+                        control={control}
+                        render={({ field }) => (
+                          <Input
+                            type="time"
+                            id="visit-time"
+                            {...field}
+                            className="appearance-none bg-background [&::-webkit-calendar-picker-indicator]:hidden [&::-webkit-calendar-picker-indicator]:appearance-none"
+                          />
+                        )}
+                      />
+                      {errors.visitTime && (
+                        <FieldError>{errors.visitTime.message}</FieldError>
+                      )}
+                    </Field>
+                  </FieldGroup>
                   <div className="flex gap-2">
                     <Button
+                      type="submit"
                       className="flex-1"
-                      onClick={bookVisit}
-                      disabled={booking}
+                      disabled={isSubmitting}
                     >
-                      {booking ? "Booking..." : "Confirm"}
+                      {isSubmitting ? "Booking..." : "Confirm"}
                     </Button>
                     <Button
+                      type="button"
                       variant="outline"
-                      onClick={() => setShowVisitForm(false)}
+                      onClick={() => {
+                        reset();
+                        setShowVisitForm(false);
+                      }}
                     >
                       Cancel
                     </Button>
                   </div>
-                </div>
+                </form>
               ) : (
                 <Button
                   className="w-full"

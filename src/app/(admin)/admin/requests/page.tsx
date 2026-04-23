@@ -5,7 +5,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { TABLE_NAMES } from "@/lib/data/table-names";
 import { supabase } from "@/lib/supabase/server";
 import { format } from "date-fns";
-import { DeleteVisitButton } from "../../../components/delete-visit-button";
+import { DeleteVisitButton } from "@/components/delete-visit-button";
 import { VisitStatusActions } from "./visit-actions";
 
 interface Visit {
