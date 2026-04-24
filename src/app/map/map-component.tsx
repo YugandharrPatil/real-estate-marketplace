@@ -4,6 +4,7 @@ import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import Link from "next/link";
+import { Property } from "@/types/types";
 
 // Fix Leaflet default marker icon
 const defaultIcon = L.icon({
@@ -19,28 +20,17 @@ const defaultIcon = L.icon({
 
 L.Marker.prototype.options.icon = defaultIcon;
 
-interface MapProperty {
-  id: string;
-  title: string;
-  price: string;
-  city: string;
-  latitude: string | null;
-  longitude: string | null;
-  images: string[] | null;
-  propertyType: string;
-}
-
 export default function MapComponent({
   properties,
 }: {
-  properties: MapProperty[];
+  properties: Property[];
 }) {
   // Center on India by default, or first property
   const center: [number, number] =
     properties.length > 0
       ? [
-          parseFloat(properties[0].latitude || "20.5937"),
-          parseFloat(properties[0].longitude || "78.9629"),
+          properties[0].latitude || 20.5937,
+          properties[0].longitude || 78.9629,
         ]
       : [20.5937, 78.9629];
 
@@ -58,15 +48,15 @@ export default function MapComponent({
         <Marker
           key={p.id}
           position={[
-            parseFloat(p.latitude || "0"),
-            parseFloat(p.longitude || "0"),
+            p.latitude || 0,
+            p.longitude || 0,
           ]}
         >
           <Popup>
             <div className="space-y-1 min-w-[180px]">
               <p className="font-semibold text-sm">{p.title}</p>
               <p className="text-xs text-muted-foreground capitalize">
-                {p.propertyType} · {p.city}
+                {p.property_type} · {p.city}
               </p>
               <p className="font-bold text-primary text-sm">
                 ₹{Number(p.price).toLocaleString()}

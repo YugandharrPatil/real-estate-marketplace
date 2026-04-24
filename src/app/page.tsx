@@ -23,12 +23,12 @@ export default function HomePage() {
 					<div className="flex flex-col sm:flex-row gap-3 justify-center">
 						<Button variant="default" asChild>
 							<Link href="/properties">
-								<Building2 className="mr-2 h-4 w-4" /> Browse Properties
+								<Building2 className="mr-1 h-4 w-4" /> Browse Properties
 							</Link>
 						</Button>
 						<Button variant="secondary" asChild>
 							<Link href="/map">
-								<MapPin className="mr-2 h-4 w-4" /> Explore Map
+								<MapPin className="mr-1 h-4 w-4" /> Explore Map
 							</Link>
 						</Button>
 					</div>

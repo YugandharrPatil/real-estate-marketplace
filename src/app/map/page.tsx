@@ -1,53 +1,15 @@
-"use client";
+import { getAllProperties } from "@/lib/data/properties";
+import { Property } from "@/types/types";
+import { MapWrapper } from "./map-wrapper";
 
-import { useEffect, useState } from "react";
-import dynamic from "next/dynamic";
-import { Loader2 } from "lucide-react";
+export default async function MapPage() {
+	const propertiesData = await getAllProperties();
 
-const MapComponent = dynamic(() => import("./map-component"), {
-  ssr: false,
-  loading: () => (
-    <div className="flex items-center justify-center h-full">
-      <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-    </div>
-  ),
-});
+	const properties = propertiesData.filter((p: Property) => p.latitude && p.longitude);
 
-interface MapProperty {
-  id: string;
-  title: string;
-  price: string;
-  city: string;
-  latitude: string | null;
-  longitude: string | null;
-  images: string[] | null;
-  propertyType: string;
-}
-
-export default function MapPage() {
-  const [properties, setProperties] = useState<MapProperty[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    fetch("/api/properties")
-      .then((r) => r.json())
-      .then((data) => {
-        setProperties(data.filter((p: MapProperty) => p.latitude && p.longitude));
-      })
-      .finally(() => setLoading(false));
-  }, []);
-
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-[calc(100vh-4rem)]">
-        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-      </div>
-    );
-  }
-
-  return (
-    <div className="h-[calc(100vh-4rem)]">
-      <MapComponent properties={properties} />
-    </div>
-  );
+	return (
+		<div className="h-[calc(100vh-4rem)]">
+			<MapWrapper properties={properties} />
+		</div>
+	);
 }

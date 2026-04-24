@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Field, FieldGroup, FieldLabel, FieldError } from "@/components/ui/field";
 import { toast } from "sonner";
 import { Loader2, Send } from "lucide-react";
-import { submitInquiryAction } from "@/lib/actions/user";
+import { submitInquiryAction } from "@/actions/user";
 
 const inquirySchema = z.object({
   name: z.string().min(1, "Name is required"),

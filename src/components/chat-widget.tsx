@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useUser, SignInButton } from "@clerk/nextjs";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -10,6 +10,13 @@ import { supabase } from "@/lib/supabase/client";
 import { TABLE_NAMES } from "@/lib/data/table-names";
 import { toast } from "sonner";
 import { format } from "date-fns";
+import { 
+  getOrCreateUserChatAction, 
+  getUserActiveChatAction, 
+  getChatMessagesAction, 
+  sendMessageUserAction 
+} from "@/actions/user";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 
 interface Message {
   id: string;
@@ -33,63 +40,55 @@ export function ChatWidget() {
   const { user, isLoaded, isSignedIn } = useUser();
   const [isOpen, setIsOpen] = useState(false);
   const [isMinimized, setIsMinimized] = useState(false);
-  const [chat, setChat] = useState<Chat | null>(null);
-  const [messages, setMessages] = useState<Message[]>([]);
   const [newMsg, setNewMsg] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [sending, setSending] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const queryClient = useQueryClient();
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   };
 
-  const fetchMessages = useCallback(async (chatId: string) => {
-    try {
-      const res = await fetch(`/api/chats/${chatId}`);
-      const data = await res.json();
-      setMessages(data.messages || []);
-    } catch (err) {
-      console.error("Failed to fetch messages:", err);
-    }
-  }, []);
+  const { data: chatData, isLoading: chatLoading } = useQuery({
+    queryKey: ["activeChat"],
+    queryFn: async () => {
+      const res = await getUserActiveChatAction();
+      if (res.error) throw new Error(res.error);
+      return res.data;
+    },
+    enabled: isOpen && !!isSignedIn,
+  });
 
-  const initChat = useCallback(async () => {
-    if (!isSignedIn) return;
-    setLoading(true);
-    try {
-      // Get or create chat
-      const res = await fetch("/api/chats/me");
-      const { chat: existingChat } = await res.json();
-      
-      if (existingChat) {
-        setChat(existingChat);
-        fetchMessages(existingChat.id);
-      }
-    } catch (err) {
-      console.error("Failed to init chat:", err);
-    } finally {
-      setLoading(false);
-    }
-  }, [isSignedIn, fetchMessages]);
+  const chat = chatData as Chat | null;
 
-  useEffect(() => {
-    if (isOpen && !isMinimized) {
-      scrollToBottom();
-    }
-  }, [messages, isOpen, isMinimized]);
+  const { data: messagesData } = useQuery({
+    queryKey: ["chatMessages", chat?.id],
+    queryFn: async () => {
+      if (!chat?.id) return [];
+      const res = await getChatMessagesAction(chat.id);
+      if (res.error) throw new Error(res.error);
+      return res.data;
+    },
+    enabled: !!chat?.id,
+  });
 
-  const startNewChat = async () => {
-    setLoading(true);
-    try {
-      const res = await fetch("/api/chats/me", { method: "POST" });
-      const { chat: newChat } = await res.json();
-      setChat(newChat);
-    } catch {
+  const messages = (messagesData as Message[]) || [];
+
+  const startChatMutation = useMutation({
+    mutationFn: async () => {
+      const res = await getOrCreateUserChatAction();
+      if (res.error) throw new Error(res.error);
+      return res.data;
+    },
+    onSuccess: (data) => {
+      queryClient.setQueryData(["activeChat"], data);
+    },
+    onError: () => {
       toast.error("Failed to start chat");
-    } finally {
-      setLoading(false);
-    }
+    },
+  });
+
+  const startNewChat = () => {
+    startChatMutation.mutate();
   };
 
   // Realtime subscription
@@ -107,7 +106,9 @@ export function ChatWidget() {
           filter: `chat_id=eq.${chat.id}`,
         },
         (payload) => {
-          setMessages((prev) => [...prev, payload.new as Message]);
+          queryClient.setQueryData(["chatMessages", chat.id], (old: Message[] | undefined) => {
+            return old ? [...old, payload.new as Message] : [payload.new as Message];
+          });
         }
       )
       .subscribe();
@@ -115,34 +116,26 @@ export function ChatWidget() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [chat?.id]);
+  }, [chat?.id, queryClient]);
 
-  useEffect(() => {
-    if (isOpen && isSignedIn && !chat) {
-      initChat();
-    }
-  }, [isOpen, isSignedIn, chat, initChat]);
-
-  const sendMessage = async () => {
-    if (!newMsg.trim() || !chat || sending) return;
-    setSending(true);
-    try {
-      const res = await fetch(`/api/chats/${chat.id}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          message: newMsg,
-          senderId: user?.id,
-          senderRole: "user",
-        }),
-      });
-      if (!res.ok) throw new Error();
+  const sendMessageMutation = useMutation({
+    mutationFn: async () => {
+      if (!chat?.id || !newMsg.trim()) return;
+      const res = await sendMessageUserAction(chat.id, newMsg);
+      if (res.error) throw new Error(res.error);
+      return res.data;
+    },
+    onSuccess: () => {
       setNewMsg("");
-    } catch (err) {
+    },
+    onError: () => {
       toast.error("Failed to send message");
-    } finally {
-      setSending(false);
-    }
+    },
+  });
+
+  const sendMessage = () => {
+    if (!newMsg.trim() || !chat || sendMessageMutation.isPending) return;
+    sendMessageMutation.mutate();
   };
 
   if (!isLoaded) return null;
@@ -199,7 +192,7 @@ export function ChatWidget() {
                   <Button size="sm">Sign In to Chat</Button>
                 </SignInButton>
               </div>
-            ) : loading ? (
+            ) : chatLoading || startChatMutation.isPending ? (
               <div className="flex-1 flex items-center justify-center">
                 <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
               </div>
@@ -251,15 +244,15 @@ export function ChatWidget() {
                   onChange={(e) => setNewMsg(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && sendMessage()}
                   className="h-9 text-sm"
-                  disabled={sending}
+                  disabled={sendMessageMutation.isPending}
                 />
                 <Button 
                   size="icon" 
                   className="h-9 w-9 shrink-0" 
                   onClick={sendMessage} 
-                  disabled={sending || !newMsg.trim()}
+                  disabled={sendMessageMutation.isPending || !newMsg.trim()}
                 >
-                  {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                  {sendMessageMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
                 </Button>
               </div>
             </div>

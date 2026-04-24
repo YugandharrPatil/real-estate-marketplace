@@ -9,6 +9,7 @@
 		"build": "next build",
 		"start": "next start",
 		"lint": "eslint",
+		"generateTypes": "npx -y supabase@latest gen types typescript --project-id \"eprnldbxuhqtxkjzvxbx\" --schema public > src/types/database.types.ts",
 		"db:generate": "drizzle-kit generate",
 		"db:migrate": "drizzle-kit migrate",
 		"db:pull": "drizzle-kit pull",

@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { getSavedPropertiesAction } from "@/lib/actions/user";
+import { getSavedPropertiesAction } from "@/actions/user";
 import { PropertyCard } from "@/components/property-card";
 import { Heart, Loader2 } from "lucide-react";
 import Link from "next/link";
