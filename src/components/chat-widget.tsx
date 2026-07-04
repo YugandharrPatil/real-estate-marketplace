@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { MessageSquare, X, Send, Loader2, Minimize2, Maximize2 } from "lucide-react";
-import { supabase } from "@/lib/supabase/client";
+import { io } from "socket.io-client";
 import { TABLE_NAMES } from "@/lib/data/table-names";
 import { toast } from "sonner";
 import { format } from "date-fns";
@@ -91,30 +91,28 @@ export function ChatWidget() {
     startChatMutation.mutate();
   };
 
+  const socketRef = useRef<any>(null);
+
   // Realtime subscription
   useEffect(() => {
     if (!chat?.id) return;
 
-    const channel = supabase
-      .channel(`chat:${chat.id}`)
-      .on(
-        "postgres_changes",
-        {
-          event: "INSERT",
-          schema: "public",
-          table: TABLE_NAMES.messages,
-          filter: `chat_id=eq.${chat.id}`,
-        },
-        (payload) => {
-          queryClient.setQueryData(["chatMessages", chat.id], (old: Message[] | undefined) => {
-            return old ? [...old, payload.new as Message] : [payload.new as Message];
-          });
-        }
-      )
-      .subscribe();
+    const socket = io(process.env.NEXT_PUBLIC_SOCKET_URL || "http://localhost:3001");
+    socketRef.current = socket;
+
+    socket.emit("joinChat", chat.id);
+
+    socket.on("newMessage", (message: Message) => {
+      queryClient.setQueryData(["chatMessages", chat.id], (old: Message[] | undefined) => {
+        if (!old) return [message];
+        if (old.some((m) => m.id === message.id)) return old;
+        return [...old, message];
+      });
+    });
 
     return () => {
-      supabase.removeChannel(channel);
+      socket.disconnect();
+      socketRef.current = null;
     };
   }, [chat?.id, queryClient]);
 
@@ -125,8 +123,11 @@ export function ChatWidget() {
       if (res.error) throw new Error(res.error);
       return res.data;
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       setNewMsg("");
+      if (data && socketRef.current && chat?.id) {
+        socketRef.current.emit("messageSent", { chatId: chat.id, message: data });
+      }
     },
     onError: () => {
       toast.error("Failed to send message");

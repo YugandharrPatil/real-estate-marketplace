@@ -1,34 +1,32 @@
 "use server";
 
-import { TABLE_NAMES } from "@/lib/data/table-names";
-import { supabase } from "@/lib/supabase/server";
+import { db } from "@/db";
+import { reProperties, reInquiries, reVisits, reChats, reMessages } from "@/db/schema";
+import { eq, desc } from "drizzle-orm";
 import { v2 as cloudinary } from "cloudinary";
 
 // --- PROPERTIES ---
 
 export async function createPropertyAction(data: any) {
 	try {
-		const insertData = {
+		const [created] = await db.insert(reProperties).values({
 			title: data.title,
 			description: data.description,
-			price: data.price,
+			price: Number(data.price),
 			address: data.address,
 			city: data.city,
 			state: data.state,
 			zip: data.zip,
-			bedrooms: data.bedrooms,
-			bathrooms: data.bathrooms,
-			area_sqft: data.areaSqft,
+			bedrooms: Number(data.bedrooms),
+			bathrooms: Number(data.bathrooms),
+			area_sqft: Number(data.areaSqft),
 			property_type: data.propertyType,
 			status: data.status,
-			latitude: data.latitude,
-			longitude: data.longitude,
-			images: data.images,
-		};
+			latitude: data.latitude ? Number(data.latitude) : null,
+			longitude: data.longitude ? Number(data.longitude) : null,
+			images: data.images || [],
+		}).returning();
 
-		const { data: created, error } = await supabase.from(TABLE_NAMES.properties).insert(insertData).select().single();
-
-		if (error) throw error;
 		return { data: created };
 	} catch (error) {
 		console.error("Error creating property:", error);
@@ -41,18 +39,18 @@ export async function updatePropertyAction(id: string, data: any) {
 		const updateData: any = {
 			title: data.title,
 			description: data.description,
-			price: data.price,
+			price: data.price !== undefined ? Number(data.price) : undefined,
 			address: data.address,
 			city: data.city,
 			state: data.state,
 			zip: data.zip,
-			bedrooms: data.bedrooms,
-			bathrooms: data.bathrooms,
-			area_sqft: data.areaSqft,
+			bedrooms: data.bedrooms !== undefined ? Number(data.bedrooms) : undefined,
+			bathrooms: data.bathrooms !== undefined ? Number(data.bathrooms) : undefined,
+			area_sqft: data.areaSqft !== undefined ? Number(data.areaSqft) : undefined,
 			property_type: data.propertyType,
 			status: data.status,
-			latitude: data.latitude,
-			longitude: data.longitude,
+			latitude: data.latitude !== undefined ? (data.latitude ? Number(data.latitude) : null) : undefined,
+			longitude: data.longitude !== undefined ? (data.longitude ? Number(data.longitude) : null) : undefined,
 			images: data.images,
 			updated_at: new Date().toISOString(),
 		};
@@ -63,9 +61,11 @@ export async function updatePropertyAction(id: string, data: any) {
 			}
 		});
 
-		const { data: updated, error } = await supabase.from(TABLE_NAMES.properties).update(updateData).eq("id", id).select().single();
+		const [updated] = await db.update(reProperties)
+			.set(updateData)
+			.where(eq(reProperties.id, id))
+			.returning();
 
-		if (error) throw error;
 		return { data: updated };
 	} catch (error) {
 		console.error("Error updating property:", error);
@@ -75,9 +75,7 @@ export async function updatePropertyAction(id: string, data: any) {
 
 export async function deletePropertyAction(id: string) {
 	try {
-		const { error } = await supabase.from(TABLE_NAMES.properties).delete().eq("id", id);
-
-		if (error) throw error;
+		await db.delete(reProperties).where(eq(reProperties.id, id));
 		return { success: true };
 	} catch (error) {
 		console.error("Error deleting property:", error);
@@ -124,9 +122,7 @@ export async function uploadImageAction(formData: FormData) {
 
 export async function deleteInquiryAction(id: string) {
 	try {
-		const { error } = await supabase.from(TABLE_NAMES.inquiries).delete().eq("id", id);
-
-		if (error) throw error;
+		await db.delete(reInquiries).where(eq(reInquiries.id, id));
 		return { success: true };
 	} catch (error) {
 		console.error("Error deleting inquiry:", error);
@@ -138,15 +134,13 @@ export async function deleteInquiryAction(id: string) {
 
 export async function updateVisitStatusAction(id: string, status: string) {
 	try {
-		const { data, error } = await supabase
-			.from(TABLE_NAMES.visits)
-			.update({ status: status as any })
-			.eq("id", id)
-			.select()
-			.single();
+		const [updated] = await db.update(reVisits)
+			.set({ status: status as any })
+			.where(eq(reVisits.id, id))
+			.returning();
 
-		if (error || !data) throw error || new Error("Not found");
-		return { data };
+		if (!updated) throw new Error("Not found");
+		return { data: updated };
 	} catch (error) {
 		console.error("Error updating visit:", error);
 		return { error: "Failed to update visit" };
@@ -155,9 +149,7 @@ export async function updateVisitStatusAction(id: string, status: string) {
 
 export async function deleteVisitAdminAction(id: string) {
 	try {
-		const { error } = await supabase.from(TABLE_NAMES.visits).delete().eq("id", id);
-
-		if (error) throw error;
+		await db.delete(reVisits).where(eq(reVisits.id, id));
 		return { success: true };
 	} catch (error) {
 		console.error("Error deleting visit:", error);
@@ -167,15 +159,29 @@ export async function deleteVisitAdminAction(id: string) {
 
 // --- CHATS ---
 
+export async function getAdminChatsAction() {
+	try {
+		const chats = await db.select()
+			.from(reChats)
+			.orderBy(desc(reChats.updated_at));
+
+		return { data: chats };
+	} catch (error) {
+		console.error("Error fetching admin chats:", error);
+		return { error: "Failed to fetch chats" };
+	}
+}
+
 export async function getAdminChatDetailsAction(id: string) {
 	try {
-		const { data: chat, error: chatError } = await supabase.from(TABLE_NAMES.chats).select("*").eq("id", id).single();
+		const [chat] = await db.select().from(reChats).where(eq(reChats.id, id)).limit(1);
 
-		if (chatError || !chat) throw chatError || new Error("Chat not found");
+		if (!chat) throw new Error("Chat not found");
 
-		const { data: messages, error: msgError } = await supabase.from(TABLE_NAMES.messages).select("*").eq("chat_id", id).order("created_at", { ascending: true });
-
-		if (msgError) throw msgError;
+		const messages = await db.select()
+			.from(reMessages)
+			.where(eq(reMessages.chat_id, id))
+			.orderBy(reMessages.created_at);
 
 		return { data: { chat, messages } };
 	} catch (error) {
@@ -186,17 +192,14 @@ export async function getAdminChatDetailsAction(id: string) {
 
 export async function updateChatStatusAction(id: string, isActive: boolean) {
 	try {
-		const { data: chat, error } = await supabase
-			.from(TABLE_NAMES.chats)
-			.update({
+		const [chat] = await db.update(reChats)
+			.set({
 				is_active: isActive,
 				updated_at: new Date().toISOString(),
 			})
-			.eq("id", id)
-			.select()
-			.single();
+			.where(eq(reChats.id, id))
+			.returning();
 
-		if (error) throw error;
 		return { data: chat };
 	} catch (error) {
 		console.error("Error updating chat status:", error);
@@ -206,20 +209,18 @@ export async function updateChatStatusAction(id: string, isActive: boolean) {
 
 export async function sendMessageAdminAction(chatId: string, message: string) {
 	try {
-		const { data: msg, error: msgError } = await supabase
-			.from(TABLE_NAMES.messages)
-			.insert({
+		const [msg] = await db.insert(reMessages)
+			.values({
 				chat_id: chatId,
 				sender_id: "admin",
 				sender_role: "admin",
 				content: message,
 			})
-			.select()
-			.single();
+			.returning();
 
-		if (msgError) throw msgError;
-
-		await supabase.from(TABLE_NAMES.chats).update({ updated_at: new Date().toISOString() }).eq("id", chatId);
+		await db.update(reChats)
+			.set({ updated_at: new Date().toISOString() })
+			.where(eq(reChats.id, chatId));
 
 		return { data: msg };
 	} catch (error) {

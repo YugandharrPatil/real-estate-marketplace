@@ -1,16 +1,16 @@
-import { supabase } from "@/lib/supabase/server";
-import { TABLE_NAMES } from "@/lib/data/table-names";
+import { db } from "@/db";
+import { reProperties } from "@/db/schema";
+import { desc } from "drizzle-orm";
 
 export async function getAllProperties() {
-	const { data: allProperties, error } = await supabase
-		.from(TABLE_NAMES.properties)
-		.select("*")
-		.order("created_at", { ascending: false });
+	try {
+		const allProperties = await db.select()
+			.from(reProperties)
+			.orderBy(desc(reProperties.created_at));
 
-	if (error) {
+		return allProperties ?? [];
+	} catch (error) {
 		console.error("Error fetching properties:", error);
 		return [];
 	}
-
-	return allProperties ?? [];
 }

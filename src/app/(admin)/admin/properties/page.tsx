@@ -1,14 +1,14 @@
 export const dynamic = "force-dynamic";
 
-import { supabase } from "@/lib/supabase/server";
-import { TABLE_NAMES } from "@/lib/data/table-names";
+import { db } from "@/db";
+import { reProperties } from "@/db/schema";
+import { desc } from "drizzle-orm";
 import { PropertiesClient } from "./properties-client";
 
 export default async function AdminPropertiesPage() {
-  const { data: allProperties } = await supabase
-    .from(TABLE_NAMES.properties)
-    .select("*")
-    .order("created_at", { ascending: false });
+  const allProperties = await db.select()
+    .from(reProperties)
+    .orderBy(desc(reProperties.created_at));
 
   const items = allProperties ?? [];
 

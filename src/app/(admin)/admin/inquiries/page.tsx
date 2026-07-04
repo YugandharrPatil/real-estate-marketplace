@@ -1,40 +1,51 @@
 export const dynamic = "force-dynamic";
 
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { TABLE_NAMES } from "@/lib/data/table-names";
-import { supabase } from "@/lib/supabase/server";
+import { db } from "@/db";
+import { reInquiries, reProperties } from "@/db/schema";
+import { eq, desc } from "drizzle-orm";
 import { format } from "date-fns";
 import DeleteInquiryAlertDialog from "../../../../components/delete-inquiry-alert-dialog";
 
 interface Inquiry {
 	id: string;
-	property_id: string;
+	property_id: string | null;
 	name: string;
 	email: string;
-	phone: string;
+	phone: string | null;
 	message: string;
 	created_at: string;
-	[key: string]: any; // for the joined property
+	re_properties: {
+		title: string;
+	} | null;
 }
 
 export default async function AdminInquiriesPage() {
-	const { data: allInquiries, error } = await supabase
-		.from(TABLE_NAMES.inquiries)
-		.select(
-			`
-      *,
-      ${TABLE_NAMES.properties} (
-        title
-      )
-    `,
-		)
-		.order("created_at", { ascending: false });
+	let items: Inquiry[] = [];
+	let dbError: string | null = null;
 
-	if (error) {
-		console.error("Supabase error fetching inquiries:", error);
+	try {
+		const result = await db.select({
+			id: reInquiries.id,
+			property_id: reInquiries.property_id,
+			name: reInquiries.name,
+			email: reInquiries.email,
+			phone: reInquiries.phone,
+			message: reInquiries.message,
+			created_at: reInquiries.created_at,
+			re_properties: {
+				title: reProperties.title,
+			}
+		})
+		.from(reInquiries)
+		.leftJoin(reProperties, eq(reInquiries.property_id, reProperties.id))
+		.orderBy(desc(reInquiries.created_at));
+
+		items = result as Inquiry[];
+	} catch (error: any) {
+		console.error("Drizzle error fetching inquiries:", error);
+		dbError = error.message;
 	}
-
-	const items = (allInquiries as Inquiry[]) ?? [];
 
 	return (
 		<div className="space-y-6">
@@ -57,10 +68,10 @@ export default async function AdminInquiriesPage() {
 						</TableRow>
 					</TableHeader>
 					<TableBody>
-						{error ? (
+						{dbError ? (
 							<TableRow>
 								<TableCell colSpan={7} className="text-center text-destructive py-8">
-									Error loading inquiries: {error.message}. Please check RLS policies or database connectivity.
+									Error loading inquiries: {dbError}. Please check database connectivity.
 								</TableCell>
 							</TableRow>
 						) : items.length === 0 ? (
@@ -71,7 +82,7 @@ export default async function AdminInquiriesPage() {
 							</TableRow>
 						) : (
 							items.map((inq: Inquiry) => {
-								const property = inq["re_properties"] as { title: string } | null;
+								const property = inq.re_properties;
 								return (
 									<TableRow key={inq.id}>
 										<TableCell className="font-medium max-w-[150px] truncate outline-none">{property?.title || "General"}</TableCell>

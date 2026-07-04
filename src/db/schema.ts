@@ -1,130 +1,121 @@
 import { sql } from "drizzle-orm";
-import { boolean, date, foreignKey, integer, numeric, pgEnum, pgSequence, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import { integer, real, text, sqliteTable, foreignKey } from "drizzle-orm/sqlite-core";
 
-export const propertyStatus = pgEnum("property_status", ["available", "sold", "pending"]);
-export const propertyType = pgEnum("property_type", ["house", "apartment", "condo", "townhouse", "land", "commercial"]);
-export const senderRole = pgEnum("sender_role", ["user", "admin"]);
-export const visitStatus = pgEnum("visit_status", ["pending", "confirmed", "cancelled"]);
-
-export const petMessagesIdSeq = pgSequence("pet_messages_id_seq", { startWith: "1", increment: "1", minValue: "1", maxValue: "2147483647", cache: "1", cycle: false });
-export const agencyProjectsIdSeq = pgSequence("agency_projects_id_seq", { startWith: "1", increment: "1", minValue: "1", maxValue: "9223372036854775807", cache: "1", cycle: false });
-export const agencyMessagesIdSeq = pgSequence("agency_messages_id_seq", { startWith: "1", increment: "1", minValue: "1", maxValue: "9223372036854775807", cache: "1", cycle: false });
-
-export const reVisits = pgTable(
+export const reVisits = sqliteTable(
 	"re_visits",
 	{
-		id: uuid().defaultRandom().primaryKey().notNull(),
-		propertyId: uuid("property_id").notNull(),
-		userId: text("user_id").notNull(),
-		userName: text("user_name").notNull(),
-		userEmail: text("user_email").notNull(),
-		visitDate: date("visit_date").notNull(),
-		visitTime: text("visit_time").notNull(),
-		status: visitStatus().default("pending").notNull(),
-		createdAt: timestamp("created_at", { withTimezone: true, mode: "string" }).defaultNow().notNull(),
+		id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+		property_id: text("property_id").notNull(),
+		user_id: text("user_id").notNull(),
+		user_name: text("user_name").notNull(),
+		user_email: text("user_email").notNull(),
+		visit_date: text("visit_date").notNull(),
+		visit_time: text("visit_time").notNull(),
+		status: text("status").$type<"pending" | "confirmed" | "cancelled">().default("pending").notNull(),
+		created_at: text("created_at").$defaultFn(() => new Date().toISOString()).notNull(),
 	},
 	(table) => [
 		foreignKey({
-			columns: [table.propertyId],
+			columns: [table.property_id],
 			foreignColumns: [reProperties.id],
 			name: "re_visits_property_id_fkey",
 		}).onDelete("cascade"),
 	],
 );
 
-export const reSavedProperties = pgTable(
+export const reSavedProperties = sqliteTable(
 	"re_saved_properties",
 	{
-		id: uuid().defaultRandom().primaryKey().notNull(),
-		propertyId: uuid("property_id").notNull(),
-		userId: text("user_id").notNull(),
-		createdAt: timestamp("created_at", { withTimezone: true, mode: "string" }).defaultNow().notNull(),
+		id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+		property_id: text("property_id").notNull(),
+		user_id: text("user_id").notNull(),
+		created_at: text("created_at").$defaultFn(() => new Date().toISOString()).notNull(),
 	},
 	(table) => [
 		foreignKey({
-			columns: [table.propertyId],
+			columns: [table.property_id],
 			foreignColumns: [reProperties.id],
 			name: "re_saved_properties_property_id_fkey",
 		}).onDelete("cascade"),
 	],
 );
 
-export const reProperties = pgTable("re_properties", {
-	id: uuid().defaultRandom().primaryKey().notNull(),
-	title: text().notNull(),
-	description: text(),
-	price: numeric({ precision: 12, scale: 2 }).notNull(),
-	address: text().notNull(),
-	city: text().notNull(),
-	state: text().notNull(),
-	zip: text().notNull(),
-	bedrooms: integer().default(0).notNull(),
-	bathrooms: integer().default(0).notNull(),
-	areaSqft: integer("area_sqft").default(0).notNull(),
-	propertyType: propertyType("property_type").default("house").notNull(),
-	status: propertyStatus().default("available").notNull(),
-	latitude: numeric({ precision: 10, scale: 7 }),
-	longitude: numeric({ precision: 10, scale: 7 }),
-	images: text().array().default([""]),
-	createdAt: timestamp("created_at", { withTimezone: true, mode: "string" }).defaultNow().notNull(),
-	updatedAt: timestamp("updated_at", { withTimezone: true, mode: "string" }).defaultNow().notNull(),
+export const reProperties = sqliteTable("re_properties", {
+	id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+	title: text("title").notNull(),
+	description: text("description"),
+	price: real("price").notNull(),
+	address: text("address").notNull(),
+	city: text("city").notNull(),
+	state: text("state").notNull(),
+	zip: text("zip").notNull(),
+	bedrooms: integer("bedrooms").default(0).notNull(),
+	bathrooms: integer("bathrooms").default(0).notNull(),
+	area_sqft: integer("area_sqft").default(0).notNull(),
+	property_type: text("property_type").$type<"house" | "apartment" | "condo" | "townhouse" | "land" | "commercial">().default("house").notNull(),
+	status: text("status").$type<"available" | "sold" | "pending">().default("available").notNull(),
+	latitude: real("latitude"),
+	longitude: real("longitude"),
+	images: text("images", { mode: "json" }).$type<string[]>().default([]),
+	created_at: text("created_at").$defaultFn(() => new Date().toISOString()).notNull(),
+	updated_at: text("updated_at").$defaultFn(() => new Date().toISOString()).notNull(),
 });
 
-export const reChats = pgTable(
+export const reChats = sqliteTable(
 	"re_chats",
 	{
-		id: uuid().defaultRandom().primaryKey().notNull(),
-		userId: text("user_id").notNull(),
-		userName: text("user_name").notNull(),
-		userEmail: text("user_email").notNull(),
-		propertyId: uuid("property_id"),
-		isActive: boolean("is_active").default(true).notNull(),
-		createdAt: timestamp("created_at", { withTimezone: true, mode: "string" }).defaultNow().notNull(),
-		updatedAt: timestamp("updated_at", { withTimezone: true, mode: "string" }).defaultNow().notNull(),
+		id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+		user_id: text("user_id").notNull(),
+		user_name: text("user_name").notNull(),
+		user_email: text("user_email").notNull(),
+		property_id: text("property_id"),
+		is_active: integer("is_active", { mode: "boolean" }).default(true).notNull(),
+		created_at: text("created_at").$defaultFn(() => new Date().toISOString()).notNull(),
+		updated_at: text("updated_at").$defaultFn(() => new Date().toISOString()).notNull(),
 	},
 	(table) => [
 		foreignKey({
-			columns: [table.propertyId],
+			columns: [table.property_id],
 			foreignColumns: [reProperties.id],
 			name: "re_chats_property_id_fkey",
 		}).onDelete("set null"),
 	],
 );
 
-export const reMessages = pgTable(
+export const reMessages = sqliteTable(
 	"re_messages",
 	{
-		id: uuid().defaultRandom().primaryKey().notNull(),
-		chatId: uuid("chat_id").notNull(),
-		senderId: text("sender_id").notNull(),
-		senderRole: senderRole("sender_role").notNull(),
-		content: text().notNull(),
-		createdAt: timestamp("created_at", { withTimezone: true, mode: "string" }).defaultNow().notNull(),
+		id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+		chat_id: text("chat_id").notNull(),
+		sender_id: text("sender_id").notNull(),
+		sender_role: text("sender_role").$type<"user" | "admin">().notNull(),
+		content: text("content").notNull(),
+		created_at: text("created_at").$defaultFn(() => new Date().toISOString()).notNull(),
 	},
 	(table) => [
 		foreignKey({
-			columns: [table.chatId],
+			columns: [table.chat_id],
 			foreignColumns: [reChats.id],
 			name: "re_messages_chat_id_fkey",
 		}).onDelete("cascade"),
 	],
 );
 
-export const reInquiries = pgTable(
+export const reInquiries = sqliteTable(
 	"re_inquiries",
 	{
-		id: uuid().defaultRandom().primaryKey().notNull(),
-		userId: text("user_id"),
-		name: text().notNull(),
-		email: text().notNull(),
-		phone: text(),
-		message: text().notNull(),
-		propertyId: uuid("property_id"),
-		createdAt: timestamp("created_at", { withTimezone: true, mode: "string" }).defaultNow().notNull(),
+		id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+		user_id: text("user_id"),
+		name: text("name").notNull(),
+		email: text("email").notNull(),
+		phone: text("phone"),
+		message: text("message").notNull(),
+		property_id: text("property_id"),
+		created_at: text("created_at").$defaultFn(() => new Date().toISOString()).notNull(),
 	},
 	(table) => [
 		foreignKey({
-			columns: [table.propertyId],
+			columns: [table.property_id],
 			foreignColumns: [reProperties.id],
 			name: "re_inquiries_property_id_fkey",
 		}).onDelete("set null"),

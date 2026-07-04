@@ -1,29 +1,30 @@
 export const dynamic = "force-dynamic";
 
-import { supabase } from "@/lib/supabase/server";
-import { TABLE_NAMES } from "@/lib/data/table-names";
+import { db } from "@/db";
+import { reProperties, reVisits, reChats, reInquiries } from "@/db/schema";
+import { count } from "drizzle-orm";
 import { Building2, CalendarCheck, MessageSquare, FileQuestion } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import Link from "next/link";
 
 export default async function AdminDashboard() {
-  const [
-    { count: propertiesCount },
-    { count: visitsCount },
-    { count: chatsCount },
-    { count: inquiriesCount },
-  ] = await Promise.all([
-    supabase.from(TABLE_NAMES.properties).select("*", { count: "exact", head: true }),
-    supabase.from(TABLE_NAMES.visits).select("*", { count: "exact", head: true }),
-    supabase.from(TABLE_NAMES.chats).select("*", { count: "exact", head: true }),
-    supabase.from(TABLE_NAMES.inquiries).select("*", { count: "exact", head: true }),
+  const [pRes, vRes, cRes, iRes] = await Promise.all([
+    db.select({ count: count() }).from(reProperties),
+    db.select({ count: count() }).from(reVisits),
+    db.select({ count: count() }).from(reChats),
+    db.select({ count: count() }).from(reInquiries),
   ]);
 
+  const propertiesCount = pRes[0]?.count ?? 0;
+  const visitsCount = vRes[0]?.count ?? 0;
+  const chatsCount = cRes[0]?.count ?? 0;
+  const inquiriesCount = iRes[0]?.count ?? 0;
+
   const stats = [
-    { label: "Properties", value: propertiesCount ?? 0, icon: Building2 },
-    { label: "Visit Requests", value: visitsCount ?? 0, icon: CalendarCheck },
-    { label: "Chats", value: chatsCount ?? 0, icon: MessageSquare },
-    { label: "Inquiries", value: inquiriesCount ?? 0, icon: FileQuestion },
+    { label: "Properties", value: propertiesCount, icon: Building2 },
+    { label: "Visit Requests", value: visitsCount, icon: CalendarCheck },
+    { label: "Chats", value: chatsCount, icon: MessageSquare },
+    { label: "Inquiries", value: inquiriesCount, icon: FileQuestion },
   ];
 
   return (

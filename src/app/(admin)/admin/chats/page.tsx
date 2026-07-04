@@ -1,8 +1,8 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { supabase } from "@/lib/supabase/client";
-import { TABLE_NAMES } from "@/lib/data/table-names";
+import { io } from "socket.io-client";
+import { getAdminChatsAction } from "@/actions/admin";
 import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -31,13 +31,9 @@ export default function AdminChatsPage() {
 
   const fetchChats = async () => {
     try {
-      const { data, error } = await supabase
-        .from(TABLE_NAMES.chats)
-        .select("*")
-        .order("updated_at", { ascending: false });
-
-      if (error) throw error;
-      setChats(data || []);
+      const res = await getAdminChatsAction();
+      if (res.error) throw new Error(res.error);
+      setChats((res.data || []) as Chat[]);
     } catch {
       toast.error("Failed to load chats");
     } finally {
@@ -48,24 +44,14 @@ export default function AdminChatsPage() {
   useEffect(() => {
     fetchChats();
 
-    // Listen for new chats or status updates
-    const channel = supabase
-      .channel("admin-chat-list")
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: TABLE_NAMES.chats,
-        },
-        () => {
-          fetchChats(); // Re-fetch list on any change to chats table
-        }
-      )
-      .subscribe();
+    const socket = io(process.env.NEXT_PUBLIC_SOCKET_URL || "http://localhost:3001");
+
+    socket.on("chatUpdated", () => {
+      fetchChats();
+    });
 
     return () => {
-      supabase.removeChannel(channel);
+      socket.disconnect();
     };
   }, []);
 

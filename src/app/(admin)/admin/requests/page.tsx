@@ -3,8 +3,9 @@ export const dynamic = "force-dynamic";
 import { DeleteVisitButton } from "@/components/delete-visit-button";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { TABLE_NAMES } from "@/lib/data/table-names";
-import { supabase } from "@/lib/supabase/server";
+import { db } from "@/db";
+import { reVisits, reProperties } from "@/db/schema";
+import { eq, desc } from "drizzle-orm";
 import { format } from "date-fns";
 import { VisitStatusActions } from "./visit-actions";
 
@@ -16,33 +17,37 @@ interface Visit {
 	visit_time: string;
 	status: string;
 	created_at: string;
-	[key: string]: any;
+	re_properties: {
+		title: string;
+	} | null;
 }
 
 export default async function AdminRequestsPage() {
-	const { data: allVisits, error } = await supabase
-		.from(TABLE_NAMES.visits)
-		.select(
-			`
-      id,
-      user_name,
-      user_email,
-      visit_date,
-      visit_time,
-      status,
-      created_at,
-      ${TABLE_NAMES.properties} (
-        title
-      )
-    `,
-		)
-		.order("created_at", { ascending: false });
+	let items: Visit[] = [];
+	let dbError: string | null = null;
 
-	if (error) {
-		console.error("Supabase error fetching visits:", error);
+	try {
+		const result = await db.select({
+			id: reVisits.id,
+			user_name: reVisits.user_name,
+			user_email: reVisits.user_email,
+			visit_date: reVisits.visit_date,
+			visit_time: reVisits.visit_time,
+			status: reVisits.status,
+			created_at: reVisits.created_at,
+			re_properties: {
+				title: reProperties.title
+			}
+		})
+		.from(reVisits)
+		.leftJoin(reProperties, eq(reVisits.property_id, reProperties.id))
+		.orderBy(desc(reVisits.created_at));
+
+		items = result as Visit[];
+	} catch (error: any) {
+		console.error("Drizzle error fetching visits:", error);
+		dbError = error.message;
 	}
-
-	const items = (allVisits as Visit[]) ?? [];
 
 	const statusColor = (s: string) => {
 		switch (s) {
@@ -78,10 +83,10 @@ export default async function AdminRequestsPage() {
 						</TableRow>
 					</TableHeader>
 					<TableBody>
-						{error ? (
+						{dbError ? (
 							<TableRow>
 								<TableCell colSpan={7} className="text-center text-destructive py-8">
-									Error loading visit requests: {error.message}. Please check RLS policies or database connectivity.
+									Error loading visit requests: {dbError}. Please check database connectivity.
 								</TableCell>
 							</TableRow>
 						) : items.length === 0 ? (
@@ -91,22 +96,22 @@ export default async function AdminRequestsPage() {
 								</TableCell>
 							</TableRow>
 						) : (
-							items.map((v: Record<string, unknown>) => {
-								const property = v[TABLE_NAMES.properties] as { title: string } | null;
+							items.map((v: Visit) => {
+								const property = v.re_properties;
 								return (
-									<TableRow key={v.id as string}>
+									<TableRow key={v.id}>
 										<TableCell className="font-medium">{property?.title || "—"}</TableCell>
-										<TableCell>{v.user_name as string}</TableCell>
-										<TableCell>{v.user_email as string}</TableCell>
-										<TableCell>{format(new Date(v.visit_date as string), "MMM dd, yyyy")}</TableCell>
-										<TableCell>{v.visit_time as string}</TableCell>
+										<TableCell>{v.user_name}</TableCell>
+										<TableCell>{v.user_email}</TableCell>
+										<TableCell>{format(new Date(v.visit_date), "MMM dd, yyyy")}</TableCell>
+										<TableCell>{v.visit_time}</TableCell>
 										<TableCell>
-											<Badge variant={statusColor(v.status as string) as "default" | "secondary" | "destructive"}>{v.status as string}</Badge>
+											<Badge variant={statusColor(v.status) as "default" | "secondary" | "destructive"}>{v.status}</Badge>
 										</TableCell>
 										<TableCell className="text-right">
 											<div className="flex justify-end gap-2">
-												<VisitStatusActions visitId={v.id as string} currentStatus={v.status as string} />
-												<DeleteVisitButton visitId={v.id as string} />
+												<VisitStatusActions visitId={v.id} currentStatus={v.status} />
+												<DeleteVisitButton visitId={v.id} />
 											</div>
 										</TableCell>
 									</TableRow>

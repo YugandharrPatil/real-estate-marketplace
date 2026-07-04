@@ -1,9 +1,10 @@
 export const dynamic = "force-dynamic";
 
 import { PropertiesGrid } from "@/components/properties-grid";
-import { TABLE_NAMES } from "@/lib/data/table-names";
 import { getAllProperties } from "@/lib/data/properties";
-import { supabase } from "@/lib/supabase/server";
+import { db } from "@/db";
+import { reSavedProperties } from "@/db/schema";
+import { eq } from "drizzle-orm";
 import { auth } from "@clerk/nextjs/server";
 
 export default async function PropertiesPage() {
@@ -15,11 +16,10 @@ export default async function PropertiesPage() {
 	// Get saved property IDs for logged-in user
 	let savedIds: string[] = [];
 	if (userId) {
-		const { data: saved } = await supabase
-			.from(TABLE_NAMES.savedProperties)
-			.select("property_id")
-			.eq("user_id", userId);
-		savedIds = (saved ?? []).map((s) => s.property_id);
+		const saved = await db.select({ property_id: reSavedProperties.property_id })
+			.from(reSavedProperties)
+			.where(eq(reSavedProperties.user_id, userId));
+		savedIds = saved.map((s) => s.property_id);
 	}
 
 	return (

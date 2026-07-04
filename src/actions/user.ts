@@ -1,8 +1,8 @@
 "use server";
 
-import { TABLE_NAMES } from "@/lib/data/table-names";
-import { supabase } from "@/lib/supabase/server";
-import { Property } from "@/types/types";
+import { db } from "@/db";
+import { reProperties, reVisits, reSavedProperties, reChats, reMessages, reInquiries } from "@/db/schema";
+import { eq, and, desc, asc } from "drizzle-orm";
 import { auth, currentUser } from "@clerk/nextjs/server";
 
 // --- CHATS ---
@@ -12,9 +12,11 @@ export async function getUserChatsAction() {
 	if (!userId) return { error: "Unauthorized", data: null };
 
 	try {
-		const { data, error } = await supabase.from(TABLE_NAMES.chats).select("*").eq("user_id", userId).order("updated_at", { ascending: false });
+		const data = await db.select()
+			.from(reChats)
+			.where(eq(reChats.user_id, userId))
+			.orderBy(desc(reChats.updated_at));
 
-		if (error) throw error;
 		return { data };
 	} catch (error) {
 		console.error("Error fetching chats:", error);
@@ -29,24 +31,25 @@ export async function getOrCreateUserChatAction() {
 
 	try {
 		// Try to find existing active chat
-		const { data: existing } = await supabase.from(TABLE_NAMES.chats).select("*").eq("user_id", userId).eq("is_active", true).order("updated_at", { ascending: false }).limit(1).single();
+		const [existing] = await db.select()
+			.from(reChats)
+			.where(and(eq(reChats.user_id, userId), eq(reChats.is_active, true)))
+			.orderBy(desc(reChats.updated_at))
+			.limit(1);
 
 		if (existing) return { data: existing };
 
 		// Create new chat
-		const { data: chat, error } = await supabase
-			.from(TABLE_NAMES.chats)
-			.insert({
+		const [chat] = await db.insert(reChats)
+			.values({
 				user_id: userId,
 				user_name: user.fullName || "User",
 				user_email: user.emailAddresses[0]?.emailAddress || "",
 				is_active: true,
 				updated_at: new Date().toISOString(),
 			})
-			.select()
-			.single();
+			.returning();
 
-		if (error) throw error;
 		return { data: chat };
 	} catch (error) {
 		console.error("Error creating chat:", error);
@@ -59,9 +62,12 @@ export async function getUserActiveChatAction() {
 	if (!userId) return { error: "Unauthorized", data: null };
 
 	try {
-		const { data: chat, error } = await supabase.from(TABLE_NAMES.chats).select("*").eq("user_id", userId).eq("is_active", true).order("updated_at", { ascending: false }).limit(1).single();
+		const [chat] = await db.select()
+			.from(reChats)
+			.where(and(eq(reChats.user_id, userId), eq(reChats.is_active, true)))
+			.orderBy(desc(reChats.updated_at))
+			.limit(1);
 
-		if (error && error.code !== "PGRST116") throw error;
 		return { data: chat || null };
 	} catch (error) {
 		console.error("Error fetching user chat:", error);
@@ -71,9 +77,11 @@ export async function getUserActiveChatAction() {
 
 export async function getChatMessagesAction(chatId: string) {
 	try {
-		const { data: messages, error } = await supabase.from(TABLE_NAMES.messages).select("*").eq("chat_id", chatId).order("created_at", { ascending: true });
+		const messages = await db.select()
+			.from(reMessages)
+			.where(eq(reMessages.chat_id, chatId))
+			.orderBy(asc(reMessages.created_at));
 
-		if (error) throw error;
 		return { data: messages };
 	} catch (error) {
 		console.error("Error fetching messages:", error);
@@ -86,20 +94,18 @@ export async function sendMessageUserAction(chatId: string, message: string) {
 	if (!userId) return { error: "Unauthorized", data: null };
 
 	try {
-		const { data: msg, error: msgError } = await supabase
-			.from(TABLE_NAMES.messages)
-			.insert({
+		const [msg] = await db.insert(reMessages)
+			.values({
 				chat_id: chatId,
 				sender_id: userId,
 				sender_role: "user",
 				content: message,
 			})
-			.select()
-			.single();
+			.returning();
 
-		if (msgError) throw msgError;
-
-		await supabase.from(TABLE_NAMES.chats).update({ updated_at: new Date().toISOString() }).eq("id", chatId);
+		await db.update(reChats)
+			.set({ updated_at: new Date().toISOString() })
+			.where(eq(reChats.id, chatId));
 
 		return { data: msg };
 	} catch (error) {
@@ -124,16 +130,16 @@ export async function bookVisitAction(data: BookVisitInput) {
 	if (!data.propertyId || !data.visitDate || !data.visitTime) return { error: "Please select a date and time" };
 
 	try {
-		const { error } = await supabase.from(TABLE_NAMES.visits).insert({
-			property_id: data.propertyId,
-			user_id: userId,
-			user_name: data.userName || "User",
-			user_email: data.userEmail || "",
-			visit_date: data.visitDate,
-			visit_time: data.visitTime,
-		});
+		await db.insert(reVisits)
+			.values({
+				property_id: data.propertyId,
+				user_id: userId,
+				user_name: data.userName || "User",
+				user_email: data.userEmail || "",
+				visit_date: data.visitDate,
+				visit_time: data.visitTime,
+			});
 
-		if (error) throw error;
 		return { success: true };
 	} catch (error) {
 		console.error("Error creating visit:", error);
@@ -146,29 +152,26 @@ export async function getUserVisitsAction() {
 	if (!userId) return { error: "Please sign in", data: [] };
 
 	try {
-		const { data: userVisits, error } = await supabase
-			.from(TABLE_NAMES.visits)
-			.select(
-				`
-        id,
-        property_id,
-        visit_date,
-        visit_time,
-        status,
-        created_at,
-        ${TABLE_NAMES.properties} (
-          title,
-          city,
-          state,
-          images
-        )
-      `,
-			)
-			.eq("user_id", userId)
-			.order("created_at", { ascending: false });
+		const rows = await db.select({
+			id: reVisits.id,
+			property_id: reVisits.property_id,
+			visit_date: reVisits.visit_date,
+			visit_time: reVisits.visit_time,
+			status: reVisits.status,
+			created_at: reVisits.created_at,
+			re_properties: {
+				title: reProperties.title,
+				city: reProperties.city,
+				state: reProperties.state,
+				images: reProperties.images,
+			}
+		})
+		.from(reVisits)
+		.leftJoin(reProperties, eq(reVisits.property_id, reProperties.id))
+		.where(eq(reVisits.user_id, userId))
+		.orderBy(desc(reVisits.created_at));
 
-		if (error) throw error;
-		return { data: userVisits || [] };
+		return { data: rows || [] };
 	} catch (error) {
 		console.error("Error fetching user visits:", error);
 		return { error: "Failed to fetch visits", data: [] };
@@ -180,9 +183,10 @@ export async function cancelVisitAction(visitId: string) {
 	if (!userId) return { error: "Please sign in" };
 
 	try {
-		const { error } = await supabase.from(TABLE_NAMES.visits).update({ status: "cancelled" }).eq("id", visitId).eq("user_id", userId);
+		await db.update(reVisits)
+			.set({ status: "cancelled" })
+			.where(and(eq(reVisits.id, visitId), eq(reVisits.user_id, userId)));
 
-		if (error) throw error;
 		return { success: true };
 	} catch (error) {
 		console.error("Error cancelling visit:", error);
@@ -195,9 +199,10 @@ export async function rescheduleVisitAction(visitId: string, visitDate: string, 
 	if (!userId) return { error: "Please sign in" };
 
 	try {
-		const { error } = await supabase.from(TABLE_NAMES.visits).update({ visit_date: visitDate, visit_time: visitTime, status: "pending" }).eq("id", visitId).eq("user_id", userId);
+		await db.update(reVisits)
+			.set({ visit_date: visitDate, visit_time: visitTime, status: "pending" })
+			.where(and(eq(reVisits.id, visitId), eq(reVisits.user_id, userId)));
 
-		if (error) throw error;
 		return { success: true };
 	} catch (error) {
 		console.error("Error rescheduling visit:", error);
@@ -212,19 +217,25 @@ export async function toggleSaveAction(propertyId: string) {
 	if (!userId) return { error: "Please sign in to save properties" };
 
 	try {
-		const { data: existing } = await supabase.from(TABLE_NAMES.savedProperties).select("id").eq("property_id", propertyId).eq("user_id", userId).limit(1);
+		const existing = await db.select({ id: reSavedProperties.id })
+			.from(reSavedProperties)
+			.where(and(eq(reSavedProperties.property_id, propertyId), eq(reSavedProperties.user_id, userId)))
+			.limit(1);
 
-		const isSaved = (existing ?? []).length > 0;
+		const isSaved = existing.length > 0;
 
 		if (isSaved) {
-			const { error } = await supabase.from(TABLE_NAMES.savedProperties).delete().eq("property_id", propertyId).eq("user_id", userId);
+			await db.delete(reSavedProperties)
+				.where(and(eq(reSavedProperties.property_id, propertyId), eq(reSavedProperties.user_id, userId)));
 
-			if (error) throw error;
 			return { saved: false };
 		} else {
-			const { error } = await supabase.from(TABLE_NAMES.savedProperties).insert({ property_id: propertyId, user_id: userId });
+			await db.insert(reSavedProperties)
+				.values({
+					property_id: propertyId,
+					user_id: userId,
+				});
 
-			if (error) throw error;
 			return { saved: true };
 		}
 	} catch (error) {
@@ -238,10 +249,11 @@ export async function getSavedPropertyIdsAction() {
 	if (!userId) return { error: "Please sign in", data: [] };
 
 	try {
-		const { data: saved, error } = await supabase.from(TABLE_NAMES.savedProperties).select("property_id").eq("user_id", userId);
+		const saved = await db.select({ property_id: reSavedProperties.property_id })
+			.from(reSavedProperties)
+			.where(eq(reSavedProperties.user_id, userId));
 
-		if (error) throw error;
-		return { data: (saved ?? []).map((s) => s.property_id) };
+		return { data: saved.map((s) => s.property_id) };
 	} catch (error) {
 		console.error("Error fetching saved property IDs:", error);
 		return { error: "Failed to fetch saved property IDs", data: [] };
@@ -253,18 +265,14 @@ export async function getSavedPropertiesAction() {
 	if (!userId) return { error: "Please sign in", data: [] };
 
 	try {
-		const { data: saved, error } = await supabase
-			.from(TABLE_NAMES.savedProperties)
-			.select(
-				`
-        ${TABLE_NAMES.properties} (*)
-      `,
-			)
-			.eq("user_id", userId);
+		const saved = await db.select({
+			re_properties: reProperties,
+		})
+		.from(reSavedProperties)
+		.innerJoin(reProperties, eq(reSavedProperties.property_id, reProperties.id))
+		.where(eq(reSavedProperties.user_id, userId));
 
-		if (error) throw error;
-
-		const items = (saved ?? []).map((s) => s[TABLE_NAMES.properties] as Property | null).filter((p): p is Property => p !== null);
+		const items = saved.map((s) => s.re_properties);
 
 		return { data: items };
 	} catch (error) {
@@ -287,16 +295,16 @@ export async function submitInquiryAction(data: SubmitInquiryInput) {
 	const { userId } = await auth();
 
 	try {
-		const { error } = await supabase.from(TABLE_NAMES.inquiries).insert({
-			user_id: userId || null,
-			name: data.name,
-			email: data.email,
-			phone: data.phone || null,
-			message: data.message,
-			property_id: data.propertyId || null,
-		});
+		await db.insert(reInquiries)
+			.values({
+				user_id: userId || null,
+				name: data.name,
+				email: data.email,
+				phone: data.phone || null,
+				message: data.message,
+				property_id: data.propertyId || null,
+			});
 
-		if (error) throw error;
 		return { success: true };
 	} catch (error) {
 		console.error("Error creating inquiry:", error);
